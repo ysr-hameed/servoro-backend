@@ -52,47 +52,70 @@ export default async function (fastify, opts) {
   });
 
   // 🔁 RESEND VERIFICATION
-  fastify.post('/resend-verification', async (req, reply) => {
-    const schema = z.object({ email: z.string().email() });
-    const { email } = schema.parse(req.body);
+fastify.post('/resend-verification', async (req, reply) => {
+  const schema = z.object({
+    identifier: z.string().min(1) // can be email or username
+  })
 
-    const result = await fastify.pg.query(`SELECT id, is_verified FROM users WHERE email=$1`, [email]);
-    const user = result.rows[0];
+  const { identifier } = schema.parse(req.body)
 
-    if (!user) return reply.code(400).send({ error: 'User not found' });
-    if (user.is_verified) return reply.code(400).send({ error: 'User already verified' });
+  // Lookup by email or username
+  const result = await fastify.pg.query(`
+    SELECT email, is_verified FROM users 
+    WHERE email = $1 OR username = $1
+  `, [identifier.toLowerCase()])
 
-    const token = randomBytes(32).toString('hex');
-    await fastify.pg.query(`UPDATE users SET verification_token=$1 WHERE email=$2`, [token, email]);
+  const user = result.rows[0]
 
-    await sendVerificationEmail(email, token);
-    reply.send({ message: 'Verification email resent' });
-  });
+  if (!user) {
+    return reply.code(400).send({ error: 'User not found' })
+  }
 
+  if (user.is_verified) {
+    return reply.code(400).send({ error: 'User already verified' })
+  }
+
+  const token = randomBytes(32).toString('hex')
+
+  await fastify.pg.query(`
+    UPDATE users SET verification_token = $1 WHERE email = $2
+  `, [token, user.email])
+
+  await sendVerificationEmail(user.email, token)
+
+  return reply.send({ message: 'Verification email resent' })
+})
   // 🔐 LOGIN
   fastify.post('/login', async (req, reply) => {
-    const schema = z.object({
-      identifier: z.string(),
-      password: z.string().min(6)
-    });
+  const schema = z.object({
+    identifier: z.string(),
+    password: z.string().min(6)
+  });
 
-    const { identifier, password } = schema.parse(req.body);
+  const { identifier, password } = schema.parse(req.body);
 
-    const result = await fastify.pg.query(
-      `SELECT * FROM users WHERE email=$1 OR username=$1`, [identifier]
-    );
-    const user = result.rows[0];
+  const result = await fastify.pg.query(
+    `SELECT * FROM users WHERE email=$1 OR username=$1`, [identifier]
+  );
+  const user = result.rows[0];
 
-    if (!user) return reply.code(400).send({ error: 'Invalid credentials' });
-    if (!user.is_verified) return reply.code(401).send({ error: 'Email not verified' });
+  if (!user) return reply.code(400).send({ error: 'Invalid credentials' });
+  if (!user.is_verified) return reply.code(401).send({ error: 'Email not verified' });
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return reply.code(400).send({ error: 'Invalid credentials' });
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return reply.code(400).send({ error: 'Invalid credentials' });
 
-    const token = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' });
+  const token = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' });
 
-    reply.send({
-      token,
+  reply
+    .setCookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // Only over HTTPS in production
+      sameSite: 'Lax', // Lax or Strict for CSRF protection
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 // 7 days
+    })
+    .send({
       user: {
         id: user.id,
         name: `${user.first_name} ${user.last_name}`,
@@ -100,7 +123,7 @@ export default async function (fastify, opts) {
         email: user.email
       }
     });
-  });
+});
 
   // 🔁 FORGOT PASSWORD
   fastify.post('/forgot-password', async (req, reply) => {
@@ -144,4 +167,20 @@ export default async function (fastify, opts) {
 
     reply.send({ message: 'Password reset successful' });
   });
+fastify.get('/me', {
+  preHandler: fastify.auth
+}, async (req, reply) => {
+  const { id } = req.user
+
+  const result = await fastify.pg.query(
+    `SELECT id, username, email FROM users WHERE id=$1`, [id]
+  )
+
+  if (!result.rows.length) {
+    return reply.code(401).send({ error: 'User not found' })
+  }
+
+  reply.send(result.rows[0])
+})
 }
+
