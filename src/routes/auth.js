@@ -3,9 +3,10 @@ import bcrypt from 'bcryptjs'
 import { randomBytes } from 'crypto'
 import { sendVerificationEmail, sendResetPasswordEmail } from '../utils/mailer.js'
 import fastifyOauth2 from '@fastify/oauth2'
+import fetch from 'node-fetch'
 
 export default async function (fastify, opts) {
-  // 🔐 REGISTER
+  // 🔐 REGISTER (FORM SIGNUP)
   fastify.post('/register', {
     config: {
       rateLimit: {
@@ -22,28 +23,45 @@ export default async function (fastify, opts) {
       email: z.string().email(),
       password: z.string().min(6),
     })
-    const body = schema.parse(req.body)
+
+    let body
+    try {
+      body = schema.parse(req.body)
+    } catch (err) {
+      return reply.code(400).send({ error: 'Invalid input', details: err.errors })
+    }
+
     const { first_name, last_name, username, email, password } = body
 
-    const [userByEmail, userByUsername] = await Promise.all([
-      fastify.pg.query('SELECT id FROM users WHERE email=$1', [email]),
+    const [emailCheck, usernameCheck] = await Promise.all([
+      fastify.pg.query('SELECT id, provider FROM users WHERE email=$1', [email]),
       fastify.pg.query('SELECT id FROM users WHERE username=$1', [username])
     ])
 
-    if (userByEmail.rows.length) return reply.code(400).send({ error: 'Email already registered' })
-    if (userByUsername.rows.length) return reply.code(400).send({ error: 'Username already taken' })
+    const existingByEmail = emailCheck.rows[0]
+    const existingByUsername = usernameCheck.rows[0]
+
+    // ✅ If email already exists, block registration
+    if (existingByEmail) {
+      return reply.code(400).send({ error: 'Email already registered with another provider' })
+    }
+
+    if (existingByUsername) {
+      return reply.code(400).send({ error: 'Username already taken' })
+    }
 
     const hashed = await bcrypt.hash(password, 10)
     const token = randomBytes(32).toString('hex')
 
     await fastify.pg.query(`
-      INSERT INTO users (first_name, last_name, username, email, password, verification_token)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO users (first_name, last_name, username, email, password, verification_token, provider)
+      VALUES ($1, $2, $3, $4, $5, $6, 'form')
     `, [first_name, last_name, username, email, hashed, token])
 
     await sendVerificationEmail(email, token)
     reply.send({ message: 'Verification email sent' })
   })
+
 
   // ✅ VERIFY EMAIL
   fastify.get('/verify-email', async (req, reply) => {
@@ -91,49 +109,74 @@ export default async function (fastify, opts) {
   })
 
   // 🔐 LOGIN
-  fastify.post('/login', {
-    config: {
-      rateLimit: {
-        max: 5,
-        timeWindow: '10m',
-        keyGenerator: req => req.body?.identifier || req.ip
-      }
+fastify.post('/login', {
+  config: {
+    rateLimit: {
+      max: 5,
+      timeWindow: '10m',
+      keyGenerator: req => req.body?.identifier || req.ip
     }
-  }, async (req, reply) => {
-    const schema = z.object({
-      identifier: z.string(),
-      password: z.string().min(6)
-    })
-    const { identifier, password } = schema.parse(req.body)
-
-    const result = await fastify.pg.query(`
-      SELECT * FROM users WHERE email=$1 OR username=$1
-    `, [identifier])
-    const user = result.rows[0]
-
-    if (!user) return reply.code(400).send({ error: 'Invalid credentials' })
-    if (!user.is_verified) return reply.code(401).send({ error: 'Email not verified' })
-
-    const valid = await bcrypt.compare(password, user.password)
-    if (!valid) return reply.code(400).send({ error: 'Invalid credentials' })
-
-    const token = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
-
-    reply.setCookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60
-    }).send({
-      user: {
-        id: user.id,
-        name: `${user.first_name} ${user.last_name}`,
-        username: user.username,
-        email: user.email
-      }
-    })
+  }
+}, async (req, reply) => {
+  const schema = z.object({
+    identifier: z.string(),
+    password: z.string().min(6)
   })
+
+  let parsed
+  try {
+    parsed = schema.parse(req.body)
+  } catch (err) {
+    return reply.code(400).send({ error: 'Invalid input', details: err.errors })
+  }
+
+  const { identifier, password } = parsed
+
+  const result = await fastify.pg.query(`
+    SELECT * FROM users WHERE email = $1 OR username = $1
+  `, [identifier.toLowerCase()])
+
+  const user = result.rows[0]
+
+  if (!user) {
+    return reply.code(400).send({ error: 'Invalid credentials' })
+  }
+
+  // 🚫 If user registered via OAuth (google/github), block password login
+  if (user.provider !== 'form') {
+    return reply.code(403).send({
+      error: `This account is registered using ${user.provider}. Please log in using ${user.provider}.`
+    })
+  }
+
+  if (!user.is_verified) {
+    return reply.code(401).send({ error: 'Email not verified' })
+  }
+  if (user && user.is_blocked) {
+  return reply.code(403).send({ error: 'Your account is blocked' })
+}
+  const valid = await bcrypt.compare(password, user.password)
+  if (!valid) {
+    return reply.code(400).send({ error: 'Invalid credentials' })
+  }
+
+  const token = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
+
+  reply.setCookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60
+  }).send({
+    user: {
+      id: user.id,
+      name: `${user.first_name} ${user.last_name}`,
+      username: user.username,
+      email: user.email
+    }
+  })
+})
 
   // 🔁 FORGOT PASSWORD
   fastify.post('/forgot-password', {
@@ -203,27 +246,43 @@ export default async function (fastify, opts) {
   })
 
   // 🔧 UPDATE PROFILE
-  fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
+fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
+  try {
+    // Schema where last_name is optional and may be empty string
     const schema = z.object({
-      first_name: z.string().min(2),
-      last_name: z.string().min(2),
+      first_name: z.string().min(2, 'First name is required'),
+      last_name: z.string().optional().nullable(),
       username: z.string().min(3).regex(/^[a-zA-Z0-9_]+$/)
-    })
-    const body = schema.parse(req.body)
-    const { id } = req.user
+    });
 
-    const existing = await fastify.pg.query(`
-      SELECT id FROM users WHERE username=$1 AND id != $2
-    `, [body.username, id])
-    if (existing.rows.length) return reply.code(400).send({ error: 'Username already taken' })
+    const body = schema.parse(req.body);
+    const { id } = req.user;
 
-    await fastify.pg.query(`
-      UPDATE users SET first_name=$1, last_name=$2, username=$3 WHERE id=$4
-    `, [body.first_name, body.last_name, body.username, id])
+    const last_name = body.last_name?.trim() || ''; // allow blank last name
 
-    reply.send({ message: 'Profile updated' })
-  })
+    // Check if username already exists for another user
+    const existing = await fastify.pg.query(
+      'SELECT id FROM users WHERE username=$1 AND id != $2',
+      [body.username, id]
+    );
+    if (existing.rows.length) {
+      return reply.code(400).send({ error: 'Username already taken' });
+    }
 
+    // Update user info
+    await fastify.pg.query(
+      `UPDATE users 
+       SET first_name = $1, last_name = $2, username = $3 
+       WHERE id = $4`,
+      [body.first_name.trim(), last_name, body.username.trim(), id]
+    );
+
+    reply.send({ message: 'Profile updated' });
+  } catch (err) {
+    fastify.log.error(err);
+    return reply.code(500).send({ error: 'Server error' });
+  }
+});
   // 🚪 LOGOUT
   fastify.post('/logout', async (req, reply) => {
     reply.clearCookie('token', {
@@ -244,115 +303,138 @@ export default async function (fastify, opts) {
     reply.send({ available: result.rowCount === 0 })
   })
 
-  // 🌐 GOOGLE OAUTH
+  // ✅ Google OAuth
   await fastify.register(fastifyOauth2, {
-    name: 'googleOAuth2',
-    scope: ['profile', 'email'],
-    credentials: {
-      client: {
-        id: process.env.GOOGLE_CLIENT_ID,
-        secret: process.env.GOOGLE_CLIENT_SECRET
-      },
-      auth: fastifyOauth2.GOOGLE_CONFIGURATION
+  name: 'googleOAuth2',
+  scope: ['profile', 'email'],
+  credentials: {
+    client: {
+      id: process.env.GOOGLE_CLIENT_ID,
+      secret: process.env.GOOGLE_CLIENT_SECRET
     },
-    startRedirectPath: '/auth/google',
-    callbackUri: process.env.GOOGLE_REDIRECT_URI
-  })
+    auth: fastifyOauth2.GOOGLE_CONFIGURATION
+  },
+  startRedirectPath: '/api/v1/auth/google', // 🔁 match with callback
+  callbackUri: process.env.GOOGLE_REDIRECT_URI
+})
 
   fastify.get('/api/v1/auth/google/callback', async (req, reply) => {
-    const token = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(req)
-    const googleUser = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${token.token.access_token}` }
-    }).then(res => res.json())
+    try {
+      const token = await fastify.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(req)
+      const googleUser = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${token.token.access_token}` }
+      }).then(res => res.json())
 
-    const email = googleUser.email?.toLowerCase()
-    const name = googleUser.name?.split(' ') || []
-    const first_name = name[0] || 'Google'
-    const last_name = name[1] || 'User'
-    const username = email.split('@')[0]
+      const email = googleUser.email?.toLowerCase()
+      const nameParts = googleUser.name?.split(' ') || []
+      const first_name = nameParts[0] || 'Google'
+      const last_name = nameParts[1] || 'User'
+      const username = email.split('@')[0]
 
-    const result = await fastify.pg.query(`SELECT * FROM users WHERE email=$1`, [email])
-    let user = result.rows[0]
+      const result = await fastify.pg.query(`SELECT * FROM users WHERE email=$1`, [email])
+      let user = result.rows[0]
 
-    if (!user) {
-      const insert = await fastify.pg.query(`
-        INSERT INTO users (first_name, last_name, username, email, is_verified)
-        VALUES ($1, $2, $3, $4, true)
-        RETURNING *
-      `, [first_name, last_name, username, email])
-      user = insert.rows[0]
-    }
-
-    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
-
-    reply.setCookie('token', jwtToken, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60
-    }).redirect(`${process.env.FRONTEND_URL}/dashboard`)
-  })
-
-  // 🐙 GITHUB OAUTH
-  await fastify.register(fastifyOauth2, {
-    name: 'githubOAuth2',
-    scope: ['user:email'],
-    credentials: {
-      client: {
-        id: process.env.GITHUB_CLIENT_ID,
-        secret: process.env.GITHUB_CLIENT_SECRET
-      },
-      auth: {
-        authorizeHost: 'https://github.com',
-        authorizePath: '/login/oauth/authorize',
-        tokenHost: 'https://github.com',
-        tokenPath: '/login/oauth/access_token'
+      if (user) {
+        if (user.is_blocked) {
+          return reply.code(403).send({ error: 'Your account is blocked' })
+        }
+        if (user.provider !== 'google') {
+          return reply.code(400).send({ error: `This email is already registered via ${user.provider}` })
+        }
+      } else {
+        const insert = await fastify.pg.query(`
+          INSERT INTO users (first_name, last_name, username, email, is_verified, provider)
+          VALUES ($1, $2, $3, $4, true, 'google')
+          RETURNING *
+        `, [first_name, last_name, username, email])
+        user = insert.rows[0]
       }
-    },
-    startRedirectPath: '/auth/github',
-    callbackUri: process.env.GITHUB_REDIRECT_URI
+
+      const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
+
+      reply.setCookie('token', jwtToken, {
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60
+      }).redirect(`${process.env.FRONTEND_URL}/dashboard`)
+    } catch (err) {
+      req.log.error(err)
+      reply.code(500).send({ error: 'Google login failed' })
+    }
   })
 
-  fastify.get('/api/v1/auth/github/callback', async (req, reply) => {
-    const token = await fastify.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(req)
-
-    const githubUser = await fetch('https://api.github.com/user', {
-      headers: { Authorization: `Bearer ${token.token.access_token}` }
-    }).then(res => res.json())
-
-    const emailsRes = await fetch('https://api.github.com/user/emails', {
-      headers: { Authorization: `Bearer ${token.token.access_token}` }
-    }).then(res => res.json())
-
-    const primaryEmail = emailsRes.find(e => e.primary && e.verified)?.email
-    if (!primaryEmail) return reply.code(400).send({ error: 'GitHub email not found' })
-
-    const email = primaryEmail.toLowerCase()
-    const username = githubUser.login.toLowerCase()
-    const first_name = githubUser.name?.split(' ')[0] || 'GitHub'
-    const last_name = githubUser.name?.split(' ')[1] || 'User'
-
-    const result = await fastify.pg.query(`SELECT * FROM users WHERE email=$1`, [email])
-    let user = result.rows[0]
-
-    if (!user) {
-      const insert = await fastify.pg.query(`
-        INSERT INTO users (first_name, last_name, username, email, is_verified)
-        VALUES ($1, $2, $3, $4, true)
-        RETURNING *
-      `, [first_name, last_name, username, email])
-      user = insert.rows[0]
+  // ✅ GitHub OAuth
+  await fastify.register(fastifyOauth2, {
+  name: 'githubOAuth2',
+  scope: ['user:email'],
+  credentials: {
+    client: {
+      id: process.env.GITHUB_CLIENT_ID,
+      secret: process.env.GITHUB_CLIENT_SECRET
+    },
+    auth: {
+      authorizeHost: 'https://github.com',
+      authorizePath: '/login/oauth/authorize',
+      tokenHost: 'https://github.com',
+      tokenPath: '/login/oauth/access_token'
     }
+  },
+  startRedirectPath: '/api/v1/auth/github',
+  callbackUri: `${process.env.BACKEND_URL}/api/v1/auth/github/callback`
+})
+  fastify.get('/api/v1/auth/github/callback', async (req, reply) => {
+    try {
+      const token = await fastify.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(req)
 
-    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
+      const githubUser = await fetch('https://api.github.com/user', {
+        headers: { Authorization: `Bearer ${token.token.access_token}` }
+      }).then(res => res.json())
 
-    reply.setCookie('token', jwtToken, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60
-    }).redirect(`${process.env.FRONTEND_URL}/dashboard`)
+      const emailsRes = await fetch('https://api.github.com/user/emails', {
+        headers: { Authorization: `Bearer ${token.token.access_token}` }
+      }).then(res => res.json())
+
+      const primaryEmail = emailsRes.find(e => e.primary && e.verified)?.email
+      if (!primaryEmail) return reply.code(400).send({ error: 'GitHub email not found or unverified' })
+
+      const email = primaryEmail.toLowerCase()
+      const username = githubUser.login.toLowerCase()
+      const first_name = githubUser.name?.split(' ')[0] || 'GitHub'
+      const last_name = githubUser.name?.split(' ')[1] || 'User'
+
+      const result = await fastify.pg.query(`SELECT * FROM users WHERE email=$1`, [email])
+      let user = result.rows[0]
+
+      if (user) {
+        if (user.is_blocked) {
+          return reply.code(403).send({ error: 'Your account is blocked' })
+        }
+        if (user.provider !== 'github') {
+          return reply.code(400).send({ error: `This email is already registered via ${user.provider}` })
+        }
+      } else {
+        const insert = await fastify.pg.query(`
+          INSERT INTO users (first_name, last_name, username, email, is_verified, provider)
+          VALUES ($1, $2, $3, $4, true, 'github')
+          RETURNING *
+        `, [first_name, last_name, username, email])
+        user = insert.rows[0]
+      }
+
+      const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
+
+      reply.setCookie('token', jwtToken, {
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60
+      }).redirect(`${process.env.FRONTEND_URL}/dashboard`)
+    } catch (err) {
+      req.log.error(err)
+      reply.code(500).send({ error: 'GitHub login failed' })
+    }
   })
 }
