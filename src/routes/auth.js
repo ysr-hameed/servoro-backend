@@ -164,22 +164,22 @@ fastify.post('/login', {
     return reply.code(400).send({ error: 'Invalid credentials' })
   }
 
-  const token = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
+  const token = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
 
   reply.setCookie('token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60
-  }).send({
-    user: {
-      id: user.id,
-      name: `${user.first_name} ${user.last_name}`,
-      username: user.username,
-      email: user.email
-    }
-  })
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+  path: '/',
+  maxAge: 30 * 24 * 60 * 60
+}).send({
+  user: {
+    id: user.id,
+    name: `${user.first_name} ${user.last_name}`,
+    username: user.username,
+    email: user.email
+  }
+})
 })
 
   // 🔁 FORGOT PASSWORD
@@ -369,15 +369,17 @@ fastify.get('/api/v1/auth/google/callback', async (req, reply) => {
       user = insert.rows[0]
     }
 
-    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
+    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
 
     reply.setCookie('token', jwtToken, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60
-    }).redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+  path: '/',
+  maxAge: 30 * 24 * 60 * 60 // 30 days
+})
+
+return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
   } catch (err) {
     req.log.error(err)
     const msg = encodeURIComponent('Google login failed')
@@ -457,15 +459,17 @@ fastify.get('/api/v1/auth/github/callback', async (req, reply) => {
       user = insert.rows[0]
     }
 
-    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '7d' })
+    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
 
     reply.setCookie('token', jwtToken, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60
-    }).redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+  path: '/',
+  maxAge: 30 * 24 * 60 * 60 // 30 days
+})
+
+return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
   } catch (err) {
     req.log.error(err)
     const msg = encodeURIComponent('GitHub login failed')

@@ -19,7 +19,15 @@ await fastify.register(cors, {
     const allowedOrigins = [
       process.env.FRONTEND_URL || 'http://localhost:5173'
     ]
-    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
+
+    // If no origin (e.g., curl, server-side), allow it
+    if (!origin) {
+      cb(null, true)
+      return
+    }
+
+    // Match full origin exactly
+    if (allowedOrigins.includes(origin)) {
       cb(null, true)
     } else {
       cb(new Error('Not allowed by CORS'), false)
