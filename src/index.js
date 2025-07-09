@@ -45,13 +45,13 @@ await fastify.register(jwt)
 
 // ✅ Register routes
 await fastify.register(authRoutes)
-// ✅ Health check route for uptime monitoring
+
 fastify.get('/ping', async (request, reply) => {
   return { status: 'ok', time: new Date().toISOString() }
 })
-// ✅ Start server
+
 const PORT = process.env.PORT || 5000
-const HOST = process.env.HOST || '0.0.0.0' // required for Render
+const HOST = process.env.HOST || '0.0.0.0' 
 
 fastify.listen({ port: PORT, host: HOST }, (err, address) => {
   if (err) {
