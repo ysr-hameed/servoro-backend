@@ -34,7 +34,6 @@ await fastify.register(cookie, {
   hook: 'onRequest'
 })
 
-// ✅ Rate limit (disabled globally, can be used per route)
 await fastify.register(rateLimit, {
   global: false
 })
