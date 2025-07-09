@@ -13,7 +13,7 @@ dotenv.config()
 // ✅ Create Fastify instance with logger enabled
 const fastify = Fastify({ logger: true })
 
-// ✅ Enable CORS – allow only specific frontend URL
+
 await fastify.register(cors, {
   origin: (origin, cb) => {
     const allowedOrigins = [process.env.FRONTEND_URL || 'http://localhost:5173']
@@ -28,7 +28,7 @@ await fastify.register(cors, {
   allowedHeaders: ['Content-Type', 'Authorization']
 })
 
-// ✅ Enable cookie support
+// ✅ Enable cookie 
 await fastify.register(cookie, {
   secret: process.env.COOKIE_SECRET || 'your_cookie_secret',
   hook: 'onRequest'
