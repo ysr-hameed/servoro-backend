@@ -7,29 +7,18 @@ import db from './plugins/db.js'
 import jwt from './plugins/jwt.js'
 import authRoutes from './routes/auth.js'
 import statsRoutes from './routes/stats.js'
+import settingsRoutes from './routes/settings.js'
 
-
-// ✅ Load environment variables
 dotenv.config()
 
-// ✅ Create Fastify instance with logger enabled
 const fastify = Fastify({ logger: true })
-
 
 await fastify.register(cors, {
   origin: (origin, cb) => {
     const allowedOrigins = [
       process.env.FRONTEND_URL || 'http://localhost:5173'
     ]
-
-    // If no origin (e.g., curl, server-side), allow it
-    if (!origin) {
-      cb(null, true)
-      return
-    }
-
-    // Match full origin exactly
-    if (allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin)) {
       cb(null, true)
     } else {
       cb(new Error('Not allowed by CORS'), false)
@@ -40,30 +29,23 @@ await fastify.register(cors, {
   allowedHeaders: ['Content-Type', 'Authorization']
 })
 
-// ✅ Enable cookie 
 await fastify.register(cookie, {
   secret: process.env.COOKIE_SECRET || 'your_cookie_secret',
   hook: 'onRequest'
 })
 
-await fastify.register(rateLimit, {
-  global: false
-})
-
-// ✅ Register custom plugins
+await fastify.register(rateLimit, { global: false })
 await fastify.register(db)
 await fastify.register(jwt)
 
-// ✅ Register routes
 await fastify.register(authRoutes)
-fastify.register(statsRoutes)
+await fastify.register(statsRoutes)
+await fastify.register(settingsRoutes, { prefix: '/api' })
 
-fastify.get('/ping', async (request, reply) => {
-  return { status: 'ok', time: new Date().toISOString() }
-})
+fastify.get('/ping', async () => ({ status: 'ok', time: new Date().toISOString() }))
 
 const PORT = process.env.PORT || 5000
-const HOST = process.env.HOST || '0.0.0.0' 
+const HOST = process.env.HOST || '0.0.0.0'
 
 fastify.listen({ port: PORT, host: HOST }, (err, address) => {
   if (err) {

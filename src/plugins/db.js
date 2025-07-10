@@ -30,5 +30,39 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id SERIAL PRIMARY KEY,
+      app_name VARCHAR(100) DEFAULT 'Servoro',
+      tagline TEXT,
+      description TEXT,
+      favicon_url TEXT,
+      logo_url TEXT,
+      primary_color VARCHAR(10),
+      secondary_color VARCHAR(10),
+      theme_mode VARCHAR(10) DEFAULT 'light',
+      support_email TEXT,
+      contact_phone TEXT,
+      default_language VARCHAR(10) DEFAULT 'en',
+      maintenance_mode BOOLEAN DEFAULT FALSE,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `)
+
+  // Insert default app settings if none exists
+  const res = await pool.query('SELECT COUNT(*) FROM app_settings')
+  if (res.rows[0].count === '0') {
+    await pool.query(`
+      INSERT INTO app_settings (
+        app_name, tagline, description, primary_color, theme_mode
+      ) VALUES (
+        'Servoro', 'Your Hyperlocal Service Hub',
+        'Find and offer services locally with ease.',
+        '#4f46e5', 'light'
+      );
+    `)
+    fastify.log.info('✅ Default app_settings inserted')
+  }
+
   fastify.log.info('✅ Database ready')
 })
