@@ -6,6 +6,8 @@ import dotenv from 'dotenv'
 import db from './plugins/db.js'
 import jwt from './plugins/jwt.js'
 import authRoutes from './routes/auth.js'
+import statsRoutes from './routes/stats.js'
+
 
 // ✅ Load environment variables
 dotenv.config()
@@ -54,6 +56,7 @@ await fastify.register(jwt)
 
 // ✅ Register routes
 await fastify.register(authRoutes)
+fastify.register(statsRoutes)
 
 fastify.get('/ping', async (request, reply) => {
   return { status: 'ok', time: new Date().toISOString() }
