@@ -1,24 +1,26 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 dotenv.config();
+const appName = process.env.APP_NAME || 'Servoro';
+
 export const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
     },
-  from: `"Servoro" <${process.env.EMAIL_USER}>`
+  from: `"${process.env.APP_NAME}" <${process.env.EMAIL_USER}>`,
 });
 
 export function sendVerificationEmail(to, token) {
   const link = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
   return transporter.sendMail({
-    from: `"Servoro" <${process.env.EMAIL_USER}>`,
+    from: `"${process.env.APP_NAME}" <${process.env.EMAIL_USER}>`,
     to,
     subject: 'Verify your email address',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e5e5; border-radius: 8px;">
-        <h2 style="color: #333;">Welcome to <span style="color:#4f46e5;">Servoro</span> 👋</h2>
+        <h2 style="color: #333;">Welcome to <span style="color:#4f46e5;">${appName}</span> 👋</h2>
         <p style="font-size: 15px; color: #555;">Please click the button below to verify your email address and activate your account.</p>
 
         <a href="${link}" target="_blank" style="display: inline-block; padding: 12px 20px; margin: 20px 0; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a>
@@ -28,7 +30,7 @@ export function sendVerificationEmail(to, token) {
 
         <hr style="margin: 32px 0;" />
 
-        <p style="font-size: 12px; color: #999;">If you didn’t create an account with Servoro, you can safely ignore this email.</p>
+        <p style="font-size: 12px; color: #999;">If you didn’t create an account with ${appName}, you can safely ignore this email.</p>
       </div>
     `,
   });
@@ -36,7 +38,7 @@ export function sendVerificationEmail(to, token) {
 export function sendResetPasswordEmail(to, token) {
   const link = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
   return transporter.sendMail({
-    from: `"Servoro" <${process.env.EMAIL_USER}>`,
+    from: `"${process.env.APP_NAME}" <${process.env.EMAIL_USER}>`,
     to,
     subject: 'Reset your password',
     html: `
