@@ -156,30 +156,38 @@ fastify.post('/login', {
   if (!user.is_verified) {
     return reply.code(401).send({ error: 'Email not verified' })
   }
-  if (user && user.is_blocked) {
-  return reply.code(403).send({ error: 'Your account is blocked' })
-}
+
+  if (user.is_blocked) {
+    return reply.code(403).send({ error: 'Your account is blocked' })
+  }
+
   const valid = await bcrypt.compare(password, user.password)
   if (!valid) {
     return reply.code(400).send({ error: 'Invalid credentials' })
   }
 
-  const token = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
+  // ✅ Include is_admin in the token
+  const token = fastify.jwt.sign({
+    id: user.id,
+    email: user.email,
+    is_admin: user.is_admin
+  }, { expiresIn: '30d' })
 
   reply.setCookie('token', token, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-  path: '/',
-  maxAge: 30 * 24 * 60 * 60
-}).send({
-  user: {
-    id: user.id,
-    name: `${user.first_name} ${user.last_name}`,
-    username: user.username,
-    email: user.email
-  }
-})
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60
+  }).send({
+    user: {
+      id: user.id,
+      name: `${user.first_name} ${user.last_name}`,
+      username: user.username,
+      email: user.email,
+      is_admin: user.is_admin // ✅ send to frontend too
+    }
+  })
 })
 
   // 🔁 FORGOT PASSWORD
@@ -241,14 +249,20 @@ fastify.post('/login', {
 
   // 🔒 GET CURRENT USER
   fastify.get('/me', { preHandler: fastify.auth }, async (req, reply) => {
-    const { id } = req.user
-    const result = await fastify.pg.query(`
-      SELECT id, username, email, first_name, last_name FROM users WHERE id=$1
-    `, [id])
-    if (!result.rows.length) return reply.code(401).send({ error: 'User not found' })
-    reply.send(result.rows[0])
-  })
+  const { id } = req.user
 
+  const result = await fastify.pg.query(`
+    SELECT id, username, email, first_name, last_name, is_admin
+    FROM users
+    WHERE id = $1
+  `, [id])
+
+  if (!result.rows.length) {
+    return reply.code(401).send({ error: 'User not found' })
+  }
+
+  reply.send(result.rows[0])
+})
   // 🔧 UPDATE PROFILE
 fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
   try {

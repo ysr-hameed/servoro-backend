@@ -22,6 +22,7 @@ export default fp(async function (fastify, opts) {
       email TEXT UNIQUE NOT NULL,
       password TEXT,
       provider TEXT NOT NULL DEFAULT 'form',
+      is_admin BOOLEAN DEFAULT false,
       is_verified BOOLEAN DEFAULT false,
       is_blocked BOOLEAN DEFAULT false,
       verification_token TEXT,
