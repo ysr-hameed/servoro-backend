@@ -303,14 +303,15 @@ fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
 });
   // 🚪 LOGOUT
   fastify.post('/logout', async (req, reply) => {
-    reply.clearCookie('token', {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: process.env.NODE_ENV === 'production'
-    })
-    reply.send({ message: 'Logged out' })
+  reply.clearCookie('token', {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'None', // ✅ Must match login cookie
+    secure: process.env.NODE_ENV === 'production' // ✅ true only in production (HTTPS)
   })
+
+  reply.send({ message: 'Logged out successfully' })
+})
 
   // ✅ CHECK USERNAME
   fastify.get('/username-check', async (req, reply) => {
