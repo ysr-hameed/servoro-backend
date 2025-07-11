@@ -10,6 +10,7 @@ export default fp(async function (fastify, opts) {
 
   fastify.decorate('pg', pool)
 
+  // ✅ Users table
   await pool.query(`
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -30,6 +31,7 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
+  // ✅ App settings table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       id SERIAL PRIMARY KEY,
@@ -38,8 +40,8 @@ export default fp(async function (fastify, opts) {
       description TEXT,
       favicon_url TEXT,
       logo_url TEXT,
-      primary_color VARCHAR(10),
-      secondary_color VARCHAR(10),
+      light_primary_color VARCHAR(10),
+      dark_primary_color VARCHAR(10),
       theme_mode VARCHAR(10) DEFAULT 'light',
       support_email TEXT,
       contact_phone TEXT,
@@ -49,16 +51,20 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
-  // Insert default app settings if none exists
+  // ✅ Insert default app_settings if not exists
   const res = await pool.query('SELECT COUNT(*) FROM app_settings')
   if (res.rows[0].count === '0') {
     await pool.query(`
       INSERT INTO app_settings (
-        app_name, tagline, description, primary_color, theme_mode
+        app_name, tagline, description,
+        light_primary_color, dark_primary_color, theme_mode
       ) VALUES (
-        'Servoro', 'Your Hyperlocal Service Hub',
+        'Servoro',
+        'Your Hyperlocal Service Hub',
         'Find and offer services locally with ease.',
-        '#4f46e5', 'light'
+        '#4f46e5',
+        '#151116',
+        'light'
       );
     `)
     fastify.log.info('✅ Default app_settings inserted')
