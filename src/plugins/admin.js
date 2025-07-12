@@ -16,6 +16,25 @@ export default fp(async function (fastify, opts) {
     }
   })
 
+  // ✅ Ensure default app_settings row exists
+  fastify.addHook('onReady', async () => {
+    const check = await fastify.pg.query('SELECT COUNT(*) FROM app_settings')
+    if (parseInt(check.rows[0].count) === 0) {
+      await fastify.pg.query(`
+        INSERT INTO app_settings (
+          id, app_name, tagline, description,
+          light_primary_color, dark_primary_color, theme_mode,
+          support_email, contact_phone, default_language,
+          maintenance_mode, favicon_url, logo_url, updated_at
+        ) VALUES (
+          1, 'StartNet', '', '', '#4f46e5', '#0f172a', 'light',
+          '', '', 'en', false, '', '', CURRENT_TIMESTAMP
+        )
+      `)
+      fastify.log.info('✅ Inserted default app_settings row')
+    }
+  })
+
   // ✅ GET /admin/settings
   fastify.get('/admin/settings', { preHandler: fastify.isAdmin }, async (req, reply) => {
     const res = await fastify.pg.query('SELECT * FROM app_settings LIMIT 1')
@@ -23,20 +42,34 @@ export default fp(async function (fastify, opts) {
   })
 
   // ✅ PUT /admin/settings
-  fastify.put('/admin/settings', { preHandler: fastify.isAdmin }, async (req, reply) => {
+  fastify.put('/admin/settings', {
+    preHandler: fastify.isAdmin,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['app_name', 'theme_mode'],
+        properties: {
+          app_name: { type: 'string' },
+          tagline: { type: 'string' },
+          description: { type: 'string' },
+          light_primary_color: { type: 'string' },
+          dark_primary_color: { type: 'string' },
+          theme_mode: { type: 'string', enum: ['light', 'dark'] },
+          support_email: { type: 'string' },
+          contact_phone: { type: 'string' },
+          default_language: { type: 'string' },
+          maintenance_mode: { type: 'boolean' },
+          favicon_url: { type: 'string' },
+          logo_url: { type: 'string' }
+        }
+      }
+    }
+  }, async (req, reply) => {
     const {
-      app_name,
-      tagline,
-      description,
-      light_primary_color,
-      dark_primary_color,
-      theme_mode,
-      support_email,
-      contact_phone,
-      default_language,
-      maintenance_mode,
-      favicon_url,
-      logo_url
+      app_name, tagline, description,
+      light_primary_color, dark_primary_color, theme_mode,
+      support_email, contact_phone, default_language,
+      maintenance_mode, favicon_url, logo_url
     } = req.body
 
     await fastify.pg.query(`
@@ -54,33 +87,23 @@ export default fp(async function (fastify, opts) {
         favicon_url = $11,
         logo_url = $12,
         updated_at = CURRENT_TIMESTAMP
+      WHERE id = 1
     `, [
-      app_name,
-      tagline,
-      description,
-      light_primary_color,
-      dark_primary_color,
-      theme_mode,
-      support_email,
-      contact_phone,
-      default_language,
-      maintenance_mode,
-      favicon_url,
-      logo_url
+      app_name, tagline, description,
+      light_primary_color, dark_primary_color, theme_mode,
+      support_email, contact_phone, default_language,
+      maintenance_mode, favicon_url, logo_url
     ])
 
+    fastify.log.info(`🛠️ Admin ${req.user.email} updated app settings`)
     reply.send({ success: true })
   })
 
-  // ✅ GET /admin/users with filters and pagination
+  // ✅ GET /admin/users (with filters)
   fastify.get('/admin/users', { preHandler: fastify.isAdmin }, async (req, reply) => {
     const {
-      page = 1,
-      limit = 20,
-      search = '',
-      is_verified,
-      is_blocked,
-      is_admin
+      page = 1, limit = 20, search = '',
+      is_verified, is_blocked, is_admin
     } = req.query
 
     const offset = (page - 1) * limit
@@ -94,17 +117,17 @@ export default fp(async function (fastify, opts) {
       i++
     }
 
-    if (typeof is_verified === 'string' && (is_verified === 'true' || is_verified === 'false')) {
+    if (typeof is_verified === 'string') {
       conditions.push(`is_verified = $${i++}`)
       values.push(is_verified === 'true')
     }
 
-    if (typeof is_blocked === 'string' && (is_blocked === 'true' || is_blocked === 'false')) {
+    if (typeof is_blocked === 'string') {
       conditions.push(`is_blocked = $${i++}`)
       values.push(is_blocked === 'true')
     }
 
-    if (typeof is_admin === 'string' && (is_admin === 'true' || is_admin === 'false')) {
+    if (typeof is_admin === 'string') {
       conditions.push(`is_admin = $${i++}`)
       values.push(is_admin === 'true')
     }
@@ -131,7 +154,25 @@ export default fp(async function (fastify, opts) {
     })
   })
 
-  // ✅ PATCH /admin/users/:id (update is_admin / is_blocked)
+  // ✅ GET /admin/users/:id
+  fastify.get('/admin/users/:id', { preHandler: fastify.isAdmin }, async (req, reply) => {
+    const { id } = req.params
+
+    const result = await fastify.pg.query(`
+      SELECT id, first_name, last_name, username, email, provider,
+             is_verified, is_blocked, is_admin, created_at
+      FROM users
+      WHERE id = $1
+    `, [id])
+
+    if (result.rowCount === 0) {
+      return reply.code(404).send({ error: 'User not found' })
+    }
+
+    reply.send(result.rows[0])
+  })
+
+  // ✅ PATCH /admin/users/:id
   fastify.patch('/admin/users/:id', { preHandler: fastify.isAdmin }, async (req, reply) => {
     const { id } = req.params
     const fields = []
@@ -148,14 +189,14 @@ export default fp(async function (fastify, opts) {
       values.push(req.body.is_blocked)
     }
 
-    if (fields.length === 0) {
+    if (!fields.length) {
       return reply.code(400).send({ error: 'No valid fields to update' })
     }
 
     values.push(id)
-    const query = `UPDATE users SET ${fields.join(', ')} WHERE id = $${i}`
-    await fastify.pg.query(query, values)
+    await fastify.pg.query(`UPDATE users SET ${fields.join(', ')} WHERE id = $${i}`, values)
 
+    fastify.log.info(`🔧 Admin ${req.user.email} updated user ${id}`)
     reply.send({ success: true })
   })
 
@@ -163,6 +204,7 @@ export default fp(async function (fastify, opts) {
   fastify.delete('/admin/users/:id', { preHandler: fastify.isAdmin }, async (req, reply) => {
     const { id } = req.params
     await fastify.pg.query('DELETE FROM users WHERE id = $1', [id])
+    fastify.log.info(`🗑️ Admin ${req.user.email} deleted user ${id}`)
     reply.send({ success: true })
   })
 
@@ -180,30 +222,4 @@ export default fp(async function (fastify, opts) {
 
     reply.send(result.rows[0])
   })
-  fastify.get('/admin/users/:id', { preHandler: fastify.isAdmin }, async (req, reply) => {
-  const { id } = req.params
-
-  try {
-    const result = await fastify.pg.query(`
-      SELECT id, first_name, last_name, username, email, provider,
-             is_verified, is_blocked, is_admin, created_at
-      FROM users
-      WHERE id = $1
-    `, [id])
-
-    if (result.rowCount === 0) {
-      return reply.code(404).send({ error: 'User not found' })
-    }
-
-    reply.send(result.rows[0])
-  } catch (err) {
-    req.log.error(err)
-    reply.code(500).send({ error: 'Failed to fetch user' })
-  }
-})
-  
-  
-  
-  
-  
 })
