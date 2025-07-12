@@ -28,6 +28,7 @@ export default fp(async function (fastify, opts) {
       verification_token TEXT,
       reset_token TEXT,
       reset_token_expires TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT now()
     );
   `)

@@ -388,11 +388,15 @@ fastify.get('/api/v1/auth/google/callback', async (req, reply) => {
       user = insert.rows[0]
     }
 
-    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
+    const jwtToken = fastify.jwt.sign({
+      id: user.id,
+      email: user.email,
+      is_admin: user.is_admin
+    }, { expiresIn: '30d' })
 
-    reply.setCookie('token', token, getCookieOptions())
+    reply.setCookie('token', jwtToken, getCookieOptions())
 
-return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
+    return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
   } catch (err) {
     req.log.error(err)
     const msg = encodeURIComponent('Google login failed')
@@ -472,11 +476,15 @@ fastify.get('/api/v1/auth/github/callback', async (req, reply) => {
       user = insert.rows[0]
     }
 
-    const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
+    const jwtToken = fastify.jwt.sign({
+      id: user.id,
+      email: user.email,
+      is_admin: user.is_admin
+    }, { expiresIn: '30d' })
 
-    reply.setCookie('token', token, getCookieOptions())
+    reply.setCookie('token', jwtToken, getCookieOptions())
 
-return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
+    return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
   } catch (err) {
     req.log.error(err)
     const msg = encodeURIComponent('GitHub login failed')

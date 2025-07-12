@@ -8,6 +8,7 @@ import jwt from './plugins/jwt.js'
 import authRoutes from './routes/auth.js'
 import statsRoutes from './routes/stats.js'
 import settingsRoutes from './routes/settings.js'
+import adminRoutes from './plugins/admin.js'
 
 dotenv.config()
 
@@ -25,7 +26,7 @@ await fastify.register(cors, {
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE','PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 })
 
@@ -40,6 +41,7 @@ await fastify.register(jwt)
 
 await fastify.register(authRoutes)
 await fastify.register(statsRoutes)
+await fastify.register(adminRoutes)
 await fastify.register(settingsRoutes, { prefix: '/api' })
 
 fastify.get('/ping', async () => ({ status: 'ok', time: new Date().toISOString() }))
