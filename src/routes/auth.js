@@ -6,6 +6,17 @@ import fastifyOauth2 from '@fastify/oauth2'
 import fetch from 'node-fetch'
 import dotenv from 'dotenv'
 dotenv.config()
+
+function getCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'None', // Needed for cross-site cookies
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60 // 30 days
+  }
+}
+
 export default async function (fastify, opts) {
   // 🔐 REGISTER (FORM SIGNUP)
   fastify.post('/register', {
@@ -146,7 +157,7 @@ fastify.post('/login', {
     return reply.code(400).send({ error: 'Invalid credentials' })
   }
 
-  // 🚫 If user registered via OAuth (google/github), block password login
+  // 🚫 OAuth protection
   if (user.provider !== 'form') {
     return reply.code(403).send({
       error: `This account is registered using ${user.provider}. Please log in using ${user.provider}.`
@@ -166,26 +177,26 @@ fastify.post('/login', {
     return reply.code(400).send({ error: 'Invalid credentials' })
   }
 
-  // ✅ Include is_admin in the token
+  // ✅ Sign JWT
   const token = fastify.jwt.sign({
     id: user.id,
     email: user.email,
     is_admin: user.is_admin
   }, { expiresIn: '30d' })
 
-  reply.setCookie('token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-    path: '/',
-    maxAge: 30 * 24 * 60 * 60
-  }).send({
+  // ✅ Set cookie securely
+  const isProd = process.env.NODE_ENV === 'production'
+
+  reply.setCookie('token', token, getCookieOptions())
+
+  // ✅ Send user payload to frontend
+  reply.send({
     user: {
       id: user.id,
       name: `${user.first_name} ${user.last_name}`,
       username: user.username,
       email: user.email,
-      is_admin: user.is_admin // ✅ send to frontend too
+      is_admin: user.is_admin
     }
   })
 })
@@ -303,16 +314,12 @@ fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
 });
   // 🚪 LOGOUT
   fastify.post('/logout', async (req, reply) => {
-  reply.clearCookie('token', {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'None', // ✅ Must match login cookie
-    secure: process.env.NODE_ENV === 'production' // ✅ true only in production (HTTPS)
-  })
+  const isProd = process.env.NODE_ENV === 'production'
 
-  reply.send({ message: 'Logged out successfully' })
+  reply.clearCookie('token', getCookieOptions())
+
+  return reply.send({ message: 'Logged out successfully' })
 })
-
   // ✅ CHECK USERNAME
   fastify.get('/username-check', async (req, reply) => {
     const username = req.query.username?.toLowerCase()
@@ -386,13 +393,7 @@ fastify.get('/api/v1/auth/google/callback', async (req, reply) => {
 
     const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
 
-    reply.setCookie('token', jwtToken, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-  path: '/',
-  maxAge: 30 * 24 * 60 * 60 // 30 days
-})
+    reply.setCookie('token', token, getCookieOptions())
 
 return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
   } catch (err) {
@@ -476,13 +477,7 @@ fastify.get('/api/v1/auth/github/callback', async (req, reply) => {
 
     const jwtToken = fastify.jwt.sign({ id: user.id }, { expiresIn: '30d' })
 
-    reply.setCookie('token', jwtToken, {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-  path: '/',
-  maxAge: 30 * 24 * 60 * 60 // 30 days
-})
+    reply.setCookie('token', token, getCookieOptions())
 
 return reply.redirect(`${process.env.FRONTEND_URL}/dashboard?oauth=success`)
   } catch (err) {
