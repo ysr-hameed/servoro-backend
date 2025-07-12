@@ -33,6 +33,15 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
+  // ✅ Follows table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS follows (
+      follower_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      following_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (follower_id, following_id)
+    );
+  `)
+
   // ✅ App settings table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -72,5 +81,5 @@ export default fp(async function (fastify, opts) {
     fastify.log.info('✅ Default app_settings inserted')
   }
 
-  fastify.log.info('✅ Database ready')
+  fastify.log.info('✅ Database ready with users, follows, and settings tables')
 })

@@ -9,6 +9,8 @@ import authRoutes from './routes/auth.js'
 import statsRoutes from './routes/stats.js'
 import settingsRoutes from './routes/settings.js'
 import adminRoutes from './plugins/admin.js'
+import profileRoutes from './routes/profile.js'
+import followRoutes from './routes/follow.js'
 
 dotenv.config()
 
@@ -42,9 +44,11 @@ await fastify.register(jwt)
 await fastify.register(authRoutes)
 await fastify.register(statsRoutes)
 await fastify.register(adminRoutes)
+await fastify.register(profileRoutes)
 await fastify.register(settingsRoutes, { prefix: '/api' })
 
-fastify.get('/ping', async () => ({ status: 'ok', time: new Date().toISOString() }))
+fastify.register(followRoutes)
+await fastify.get('/ping', async () => ({ status: 'ok', time: new Date().toISOString() }))
 
 const PORT = process.env.PORT || 5000
 const HOST = process.env.HOST || '0.0.0.0'
