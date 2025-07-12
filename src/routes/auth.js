@@ -7,13 +7,15 @@ import fetch from 'node-fetch'
 import dotenv from 'dotenv'
 dotenv.config()
 
-function getCookieOptions() {
+export function getCookieOptions() {
+  const isProd = process.env.NODE_ENV === 'production'
+
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'None', // Needed for cross-site cookies
+    secure: isProd,                     // true only in production (https)
+    sameSite: isProd ? 'None' : 'Lax',  // Lax works on localhost
     path: '/',
-    maxAge: 30 * 24 * 60 * 60 // 30 days
+    maxAge: 30 * 24 * 60 * 60           // 30 days
   }
 }
 
@@ -258,26 +260,23 @@ fastify.post('/login', {
     reply.send({ message: 'Password reset successful' })
   })
 
-  // 🔒 GET CURRENT USER
-  fastify.get('/me', { preHandler: fastify.auth }, async (req, reply) => {
-  const { id } = req.user
+fastify.get('/me', { preHandler: fastify.auth }, async (req, reply) => {
+  const { id } = req.user;
 
   const result = await fastify.pg.query(`
     SELECT id, username, email, first_name, last_name, is_admin
     FROM users
     WHERE id = $1
-  `, [id])
+  `, [id]);
 
   if (!result.rows.length) {
-    return reply.code(401).send({ error: 'User not found' })
+    return reply.code(401).send({ error: 'User not found' });
   }
 
-  reply.send(result.rows[0])
-})
-  // 🔧 UPDATE PROFILE
+  reply.send(result.rows[0]);
+});
 fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
   try {
-    // Schema where last_name is optional and may be empty string
     const schema = z.object({
       first_name: z.string().min(2, 'First name is required'),
       last_name: z.string().optional().nullable(),
@@ -286,10 +285,9 @@ fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
 
     const body = schema.parse(req.body);
     const { id } = req.user;
+    const last_name = body.last_name?.trim() || '';
 
-    const last_name = body.last_name?.trim() || ''; // allow blank last name
-
-    // Check if username already exists for another user
+    // Ensure username is unique
     const existing = await fastify.pg.query(
       'SELECT id FROM users WHERE username=$1 AND id != $2',
       [body.username, id]
@@ -298,7 +296,6 @@ fastify.put('/me', { preHandler: fastify.auth }, async (req, reply) => {
       return reply.code(400).send({ error: 'Username already taken' });
     }
 
-    // Update user info
     await fastify.pg.query(
       `UPDATE users 
        SET first_name = $1, last_name = $2, username = $3 
