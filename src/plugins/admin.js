@@ -156,11 +156,12 @@ export default fp(async function (fastify, opts) {
 
   // ✅ GET /admin/users/:id
   fastify.get('/admin/users/:id', { preHandler: fastify.isAdmin }, async (req, reply) => {
-    const { id } = req.params
+  const { id } = req.params
 
+  try {
     const result = await fastify.pg.query(`
       SELECT id, first_name, last_name, username, email, provider,
-             is_verified, is_blocked, is_admin, created_at
+             is_verified, is_blocked, is_admin, created_at, updated_at
       FROM users
       WHERE id = $1
     `, [id])
@@ -169,9 +170,15 @@ export default fp(async function (fastify, opts) {
       return reply.code(404).send({ error: 'User not found' })
     }
 
-    reply.send(result.rows[0])
-  })
+    return reply.send({
+      data: result.rows[0] // ✅ wrap in structured format
+    })
 
+  } catch (err) {
+    fastify.log.error(err)
+    return reply.code(500).send({ error: 'Internal server error' })
+  }
+})
   // ✅ PATCH /admin/users/:id
   fastify.patch('/admin/users/:id', { preHandler: fastify.isAdmin }, async (req, reply) => {
     const { id } = req.params
@@ -202,11 +209,11 @@ export default fp(async function (fastify, opts) {
 
   // ✅ DELETE /admin/users/:id
   fastify.delete('/admin/users/:id', { preHandler: fastify.isAdmin }, async (req, reply) => {
-    const { id } = req.params
-    await fastify.pg.query('DELETE FROM users WHERE id = $1', [id])
-    fastify.log.info(`🗑️ Admin ${req.user.email} deleted user ${id}`)
-    reply.send({ success: true })
-  })
+  const { id } = req.params
+  await fastify.pg.query('DELETE FROM users WHERE id = $1', [id])
+  fastify.log.info(`🗑️ Admin ${req.user.email} deleted user ${id}`)
+  reply.send({ success: true })
+})
 
   // ✅ GET /admin/overview
   fastify.get('/admin/overview', { preHandler: fastify.isAdmin }, async (req, reply) => {
