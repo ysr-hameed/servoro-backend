@@ -1,3 +1,4 @@
+// plugins/pg.js
 import fp from 'fastify-plugin'
 import pkg from 'pg'
 const { Pool } = pkg
@@ -10,10 +11,11 @@ export default fp(async function (fastify, opts) {
 
   fastify.decorate('pg', pool)
 
-  // ✅ Users table
-  await pool.query(`
-    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+  // ✅ Enable UUID extension
+  await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`)
 
+  // ✅ Users Table
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       first_name TEXT NOT NULL,
@@ -33,7 +35,7 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
-  // ✅ Follows table
+  // ✅ Follows Table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS follows (
       follower_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -42,7 +44,7 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
-  // ✅ App settings table
+  // ✅ App Settings Table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       id SERIAL PRIMARY KEY,
@@ -81,5 +83,10 @@ export default fp(async function (fastify, opts) {
     fastify.log.info('✅ Default app_settings inserted')
   }
 
-  fastify.log.info('✅ Database ready with users, follows, and settings tables')
+  // ✅ Conversations Table
+  
+
+
+
+  fastify.log.info('✅ Database ready with users, follows, settings')
 })
