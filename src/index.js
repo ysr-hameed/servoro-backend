@@ -1,5 +1,3 @@
-// src/index.js (or server.js)
-
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import cookie from '@fastify/cookie'
@@ -16,16 +14,16 @@ import adminRoutes from './plugins/admin.js'
 import profileRoutes from './routes/profile.js'
 import followRoutes from './routes/follow.js'
 import userRoutes from './routes/userRoutes.js'
+import startupRoutes from './routes/startups.js'
 
 dotenv.config()
 
 async function start() {
   const fastify = Fastify({
     logger: true,
-    trustProxy: true, // Optional: for secure cookies if behind proxy (e.g., Vercel, Nginx)
+    trustProxy: true
   })
 
-  // ✅ CORS
   await fastify.register(cors, {
     origin: (origin, cb) => {
       const allowedOrigins = [process.env.FRONTEND_URL || 'http://localhost:5173']
@@ -40,7 +38,6 @@ async function start() {
     allowedHeaders: ['Content-Type', 'Authorization']
   })
 
-  // ✅ Middleware
   await fastify.register(cookie, {
     secret: process.env.COOKIE_SECRET || 'your_cookie_secret',
     hook: 'onRequest'
@@ -50,11 +47,9 @@ async function start() {
     global: false
   })
 
-  // ✅ Plugins
-  await fastify.register(db)   // ⬅️ Makes fastify.db available
-  await fastify.register(jwt)  // ⬅️ Makes fastify.auth / fastify.adminAuth available
+  await fastify.register(db)
+  await fastify.register(jwt)
 
-  // ✅ Routes (after db/jwt)
   await fastify.register(authRoutes)
   await fastify.register(statsRoutes)
   await fastify.register(adminRoutes)
@@ -62,8 +57,8 @@ async function start() {
   await fastify.register(settingsRoutes, { prefix: '/api' })
   await fastify.register(followRoutes)
   await fastify.register(userRoutes)
+  await fastify.register(startupRoutes)
 
-  // ✅ Health check
   fastify.get('/ping', async () => ({
     status: 'ok',
     time: new Date().toISOString()

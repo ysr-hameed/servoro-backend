@@ -11,8 +11,9 @@ export default fp(async function (fastify, opts) {
 
   fastify.decorate('pg', pool)
 
-  // ✅ Enable UUID extension
+  // ✅ Enable UUID extension + gen_random_uuid()
   await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`)
+  await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`)
 
   // ✅ Users Table
   await pool.query(`
@@ -83,10 +84,25 @@ export default fp(async function (fastify, opts) {
     fastify.log.info('✅ Default app_settings inserted')
   }
 
-  // ✅ Conversations Table
-  
+  // ✅ Startups Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS startups (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      tagline TEXT,
+      industry TEXT,
+      description TEXT,
+      tech_stack TEXT[],
+      mvp_stage TEXT CHECK (mvp_stage IN ('idea', 'building', 'launched')),
+      logo_url TEXT,
+      is_public BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `)
 
+  // ✅ Future tables like conversations etc can go below...
 
-
-  fastify.log.info('✅ Database ready with users, follows, settings')
+  fastify.log.info('✅ Database ready with users, follows, settings, startups')
 })
