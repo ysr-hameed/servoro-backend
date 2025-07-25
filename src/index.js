@@ -8,13 +8,10 @@ import db from './plugins/db.js'
 import jwt from './plugins/jwt.js'
 
 import authRoutes from './routes/auth.js'
-import statsRoutes from './routes/stats.js'
+
 import settingsRoutes from './routes/settings.js'
 import adminRoutes from './plugins/admin.js'
 import profileRoutes from './routes/profile.js'
-import followRoutes from './routes/follow.js'
-import userRoutes from './routes/userRoutes.js'
-import startupRoutes from './routes/startups.js'
 
 dotenv.config()
 
@@ -51,13 +48,10 @@ async function start() {
   await fastify.register(jwt)
 
   await fastify.register(authRoutes)
-  await fastify.register(statsRoutes)
   await fastify.register(adminRoutes)
   await fastify.register(profileRoutes)
   await fastify.register(settingsRoutes, { prefix: '/api' })
-  await fastify.register(followRoutes)
-  await fastify.register(userRoutes)
-  await fastify.register(startupRoutes)
+
 
   fastify.get('/ping', async () => ({
     status: 'ok',

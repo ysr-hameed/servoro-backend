@@ -36,14 +36,7 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
-  // ✅ Follows Table
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS follows (
-      follower_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      following_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      PRIMARY KEY (follower_id, following_id)
-    );
-  `)
+
 
   // ✅ App Settings Table
   await pool.query(`
@@ -73,7 +66,7 @@ export default fp(async function (fastify, opts) {
         app_name, tagline, description,
         light_primary_color, dark_primary_color, theme_mode
       ) VALUES (
-        'Servoro',
+        'StartNet',
         'Your Hyperlocal Service Hub',
         'Find and offer services locally with ease.',
         '#4f46e5',
@@ -84,34 +77,6 @@ export default fp(async function (fastify, opts) {
     fastify.log.info('✅ Default app_settings inserted')
   }
 
-  // ✅ Updated Startups Table with Rich Info
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS startups (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      tagline TEXT,
-      industry TEXT,
-      description TEXT,
-      tech_stack TEXT[],
-      mvp_stage TEXT CHECK (mvp_stage IN ('idea', 'building', 'launched')),
-      stage TEXT, -- e.g., pre-seed, seed, Series A
-      team_size INTEGER,
-      location TEXT,
-      founding_date DATE,
-      mission TEXT,
-      problem TEXT,
-      solution TEXT,
-      logo_url TEXT,
-      banner_url TEXT,
-      website_url TEXT,
-      followers_count INTEGER DEFAULT 0,
-      views INTEGER DEFAULT 0,
-      is_public BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    );
-  `)
 
   fastify.log.info('✅ Database ready with users, follows, settings, startups')
 })
