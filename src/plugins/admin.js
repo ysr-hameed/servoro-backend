@@ -21,16 +21,16 @@ export default fp(async function (fastify, opts) {
     const check = await fastify.pg.query('SELECT COUNT(*) FROM app_settings')
     if (parseInt(check.rows[0].count) === 0) {
       await fastify.pg.query(`
-        INSERT INTO app_settings (
-          id, app_name, tagline, description,
-          light_primary_color, dark_primary_color, theme_mode,
-          support_email, contact_phone, default_language,
-          maintenance_mode, favicon_url, logo_url, updated_at
-        ) VALUES (
-          1, 'StartNet', '', '', '#4f46e5', '#0f172a', 'light',
-          '', '', 'en', false, '', '', CURRENT_TIMESTAMP
-        )
-      `)
+  INSERT INTO app_settings (
+    id, app_name, tagline, description,
+    light_primary_color, dark_primary_color, 
+    support_email, contact_phone, default_language,
+    maintenance_mode, favicon_url, logo_url, updated_at
+  ) VALUES (
+    1, 'StartNet', '', '', '#4f46e5', '#0f172a',
+    '', '', 'en', false, '', '', CURRENT_TIMESTAMP
+  )
+`)
       fastify.log.info('✅ Inserted default app_settings row')
     }
   })
@@ -47,14 +47,14 @@ export default fp(async function (fastify, opts) {
     schema: {
       body: {
         type: 'object',
-        required: ['app_name', 'theme_mode'],
+        required: ['app_name'],
         properties: {
           app_name: { type: 'string' },
           tagline: { type: 'string' },
           description: { type: 'string' },
           light_primary_color: { type: 'string' },
           dark_primary_color: { type: 'string' },
-          theme_mode: { type: 'string', enum: ['light', 'dark'] },
+          
           support_email: { type: 'string' },
           contact_phone: { type: 'string' },
           default_language: { type: 'string' },
@@ -67,7 +67,7 @@ export default fp(async function (fastify, opts) {
   }, async (req, reply) => {
     const {
       app_name, tagline, description,
-      light_primary_color, dark_primary_color, theme_mode,
+      light_primary_color, dark_primary_color, 
       support_email, contact_phone, default_language,
       maintenance_mode, favicon_url, logo_url
     } = req.body
@@ -79,18 +79,17 @@ export default fp(async function (fastify, opts) {
         description = $3,
         light_primary_color = $4,
         dark_primary_color = $5,
-        theme_mode = $6,
-        support_email = $7,
-        contact_phone = $8,
-        default_language = $9,
-        maintenance_mode = $10,
-        favicon_url = $11,
-        logo_url = $12,
+        support_email = $6,
+        contact_phone = $7,
+        default_language = $8,
+        maintenance_mode = $9,
+        favicon_url = $10,
+        logo_url = $11,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = 1
     `, [
       app_name, tagline, description,
-      light_primary_color, dark_primary_color, theme_mode,
+      light_primary_color, dark_primary_color, 
       support_email, contact_phone, default_language,
       maintenance_mode, favicon_url, logo_url
     ])

@@ -15,7 +15,6 @@ export default async function (fastify, opts) {
       logo_url,
       light_primary_color,
       dark_primary_color,
-      theme_mode,
       support_email,
       contact_phone,
       default_language,
@@ -28,7 +27,7 @@ export default async function (fastify, opts) {
       await fastify.pg.query(`
         INSERT INTO app_settings (
           app_name, tagline, description, favicon_url, logo_url,
-          light_primary_color, dark_primary_color, theme_mode,
+          light_primary_color, dark_primary_color, 
           support_email, contact_phone, default_language, maintenance_mode
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       `, [
@@ -39,7 +38,6 @@ export default async function (fastify, opts) {
         logo_url,
         light_primary_color,
         dark_primary_color,
-        theme_mode,
         support_email,
         contact_phone,
         default_language,
@@ -55,11 +53,10 @@ export default async function (fastify, opts) {
           logo_url = $5,
           light_primary_color = $6,
           dark_primary_color = $7,
-          theme_mode = $8,
-          support_email = $9,
-          contact_phone = $10,
-          default_language = $11,
-          maintenance_mode = $12,
+          support_email = $8,
+          contact_phone = $9,
+          default_language = $10,
+          maintenance_mode = $11,
           updated_at = NOW()
       `, [
         app_name,
@@ -69,7 +66,6 @@ export default async function (fastify, opts) {
         logo_url,
         light_primary_color,
         dark_primary_color,
-        theme_mode,
         support_email,
         contact_phone,
         default_language,

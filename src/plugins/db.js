@@ -49,7 +49,6 @@ export default fp(async function (fastify, opts) {
       logo_url TEXT,
       light_primary_color VARCHAR(10),
       dark_primary_color VARCHAR(10),
-      theme_mode VARCHAR(10) DEFAULT 'light',
       support_email TEXT,
       contact_phone TEXT,
       default_language VARCHAR(10) DEFAULT 'en',
@@ -64,14 +63,13 @@ export default fp(async function (fastify, opts) {
     await pool.query(`
       INSERT INTO app_settings (
         app_name, tagline, description,
-        light_primary_color, dark_primary_color, theme_mode
+        light_primary_color, dark_primary_color
       ) VALUES (
         'StartNet',
         'Your Hyperlocal Service Hub',
         'Find and offer services locally with ease.',
         '#4f46e5',
-        '#151116',
-        'light'
+        '#0e8aa3'
       );
     `)
     fastify.log.info('✅ Default app_settings inserted')
