@@ -1,10 +1,11 @@
-// src/plugins/jwt.js
 import fp from 'fastify-plugin'
 import fastifyJwt from '@fastify/jwt'
 import dotenv from 'dotenv'
+
 dotenv.config()
 
 export default fp(async function (fastify, opts) {
+  // ✅ Register JWT with cookie support
   fastify.register(fastifyJwt, {
     secret: process.env.JWT_SECRET,
     cookie: {
@@ -13,17 +14,16 @@ export default fp(async function (fastify, opts) {
     }
   })
 
-  // ✅ General user auth
+  // ✅ General user auth middleware
   fastify.decorate('auth', async function (request, reply) {
     try {
-      const user = await request.jwtVerify()
-      request.user = user
-    } catch (err) {
-      reply.code(401).send({ error: 'Unauthorized' })
+      request.user = await request.jwtVerify()
+    } catch {
+      return reply.code(401).send({ error: 'Unauthorized' })
     }
   })
 
-  // ✅ Admin-only auth
+  // ✅ Admin-only auth middleware
   fastify.decorate('adminAuth', async function (request, reply) {
     try {
       const user = await request.jwtVerify()
@@ -31,8 +31,8 @@ export default fp(async function (fastify, opts) {
         return reply.code(403).send({ error: 'Admin access only' })
       }
       request.user = user
-    } catch (err) {
-      reply.code(401).send({ error: 'Unauthorized' })
+    } catch {
+      return reply.code(401).send({ error: 'Unauthorized' })
     }
   })
 })

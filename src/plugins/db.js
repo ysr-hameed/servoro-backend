@@ -11,7 +11,7 @@ export default fp(async function (fastify, opts) {
 
   fastify.decorate('pg', pool)
 
-  // ✅ Enable UUID + gen_random_uuid
+  // ✅ Enable UUID & Random ID Extensions
   await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`)
   await pool.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`)
 
@@ -36,8 +36,6 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
-
-
   // ✅ App Settings Table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -57,7 +55,7 @@ export default fp(async function (fastify, opts) {
     );
   `)
 
-  // ✅ Insert default app_settings if not exists
+  // ✅ Insert default app_settings if empty
   const res = await pool.query('SELECT COUNT(*) FROM app_settings')
   if (res.rows[0].count === '0') {
     await pool.query(`
@@ -75,6 +73,26 @@ export default fp(async function (fastify, opts) {
     fastify.log.info('✅ Default app_settings inserted')
   }
 
+// ✅ Notifications Table
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  user_id UUID,
+  title TEXT,
+  message TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+`);
 
-  fastify.log.info('✅ Database ready with users, follows, settings, startups')
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS notification_reads (
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  notification_id UUID REFERENCES notifications(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, notification_id)
+);
+`);
+
+  fastify.log.info('✅ Database ready with users, settings, notifications')
 })

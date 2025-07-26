@@ -11,7 +11,8 @@ import authRoutes from './routes/auth.js'
 
 import settingsRoutes from './routes/settings.js'
 import adminRoutes from './plugins/admin.js'
-import profileRoutes from './routes/profile.js'
+import notifications from './routes/notifications.js'
+
 
 dotenv.config()
 
@@ -49,9 +50,8 @@ async function start() {
 
   await fastify.register(authRoutes)
   await fastify.register(adminRoutes)
-  await fastify.register(profileRoutes)
   await fastify.register(settingsRoutes, { prefix: '/api' })
-
+  await fastify.register(notifications)
 
   fastify.get('/ping', async () => ({
     status: 'ok',
